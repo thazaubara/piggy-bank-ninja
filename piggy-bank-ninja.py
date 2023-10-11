@@ -39,6 +39,9 @@ class Transaction:
             self.buchungsdatum = self.buchungsdatum.strip('\ufeff')
             self.buchungsdatum = datetime.strptime(self.buchungsdatum, "%d.%m.%Y")
 
+            # datetime object from date string in form of 15.03.2017 15:07:03:000
+            self.datum = datetime.strptime(self.datum, "%d.%m.%Y %H:%M:%S:%f")
+
     def __str__(self):
         return f"{self.buchungsdatum} {str(self.betrag).rjust(9)} {self.waehrung}:  {self.referenz}"
 
@@ -149,12 +152,57 @@ def graph_balance(account):
     plt.tight_layout()
     plt.show()
 
+def graph_multiple_accounts():
+    # Create a figure for the entire plot
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    # Customize the x-axis ticks to show every month and format them as "%b %Y"
+    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%m %Y'))
+    plt.xticks(rotation=45)
+
+    # Initialize colors for different accounts
+    colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
+
+    for i, account in enumerate(accounts):
+        # Prepare data for the current account
+        dates = []
+        balances = []
+        balance = account.startingbalance
+        for transaction in account.transactions:
+            balance += float(transaction.betrag.replace(",", "."))
+            dates.append(transaction.datum)
+            balances.append(balance)
+
+        # Create a step chart for the current account
+        line = ax.step(dates, balances, where="mid", label=f'{account.name}', color=colors[i], linewidth=0.75)
+
+        # Use mplcursors to display values on hover with custom formatting
+        cursor = mplcursors.cursor(line, hover=True)
+
+        @cursor.connect("add")
+        def on_hover(sel):
+            x, y = sel.target
+            y_formatted = f"{y:.2f}€"  # Format the y value with 2 decimal places
+            sel.annotation.set_text(f"{y_formatted}")
+
+    # Add labels, a title, and a legend
+    plt.xlabel("Date")
+    plt.ylabel("Values")
+    plt.title("Multiple Account Balances with Every Month on X-Axis")
+    plt.legend()
+
+    # Display the plot
+    plt.tight_layout()
+    plt.show()
+
 accounts = [Account(accountnumber="AT913301000004004636", name="Gehaltskonto", startingbalance=-706.88),
             Account(accountnumber="AT383301077704004636", name="Sparkonto", startingbalance=10500)]
 
 greeting()
 read_files()
-graph_balance(accounts[1])
+# graph_balance(accounts[1])
+graph_multiple_accounts()
 
 
 for account in accounts:
