@@ -1,0 +1,8 @@
+/files/
+/credentials.py
+
+.idea/
+
+__pycache__/
+
+.DS_Store
