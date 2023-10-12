@@ -128,13 +128,3 @@ def _log(message, color, severity=INFO):
         with open(_logfile_name, "a") as file:
             file.write(str(message) + "\n")
 
-
-def greeting():
-    string = """
-       welcome to the mighty              ________________  _____ 
-  _______   _   __ _  ___  ______ __     / __/ __/_  __/ / / / _ \\
- / __/ -_) (_) /  ' \/ _ \/ __/ // /    _\ \/ _/  / / / /_/ / ___/
-/_/  \__/ (_) /_/_/_/\___/_/  \_, /    /___/___/ /_/  \____/_/    
------------------------------/___/--------------------------------
-    """
-    log(string)

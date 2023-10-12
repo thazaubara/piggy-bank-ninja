@@ -178,7 +178,7 @@ def graph_multiple_accounts():
         line = ax.step(dates, balances, where="mid", label=f'{account.name}', color=colors[i], linewidth=0.75)
 
         # Use mplcursors to display values on hover with custom formatting
-        cursor = mplcursors.cursor(line, hover=True)
+        cursor = mplcursors.cursor(line, hover=True)sa
 
         @cursor.connect("add")
         def on_hover(sel):
