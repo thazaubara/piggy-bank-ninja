@@ -1,60 +1,51 @@
-from datetime import datetime
+
 import graph
 
 import logger
 import os
+from database import *
 
+def extract_accountnumber_from_filename(filename):
+    accountnumbers = {"Gahaltskonto": "AT913301000004004636",
+                      "Sparkonto": "AT383301077704004636"}
+    for substr in filename.split("_"):
+        if substr in accountnumbers.values():
+            return substr
+    return None
 
-class Account:
-    def __init__(self, accountnumber=None, name=None, startingbalance=None):
-        self.accountnumber = accountnumber
-        self.name = name
-        self.startingbalance = startingbalance
-        self.transactions = []
+def transaction_dict_from_line(csv_line):
+    if csv_line is not None:
+        buchungsdatum, referenz, valuta, betrag, waehrung, datum = csv_line.split(";")
 
-    def __str__(self):
-        return f"{self.accountnumber} {self.name}"
+        # datetime object from date  string in form of "%d.%m.%Y"
+        buchungsdatum = buchungsdatum.strip('\ufeff')
+        buchungsdatum = datetime.strptime(buchungsdatum, "%d.%m.%Y")
+        buchungsdatum = buchungsdatum.date()
 
-    def calc_balance(self):
-        balance = self.startingbalance
-        for transaction in self.transactions:
-            balance += float(transaction.betrag.replace(",", "."))
-        return round(balance, 2)
+        # referenz is already a string, kill quotes
+        referenz = referenz.strip('"')
+        referenz = referenz.strip("'")
+        referenz = referenz.strip("'")
 
-class Transaction:
-    def __init__(self, line=None):
-        self.buchungsdatum = None
-        self.referenz = None
-        self.valuta = None
-        self.betrag = None
-        self.waehrung = None
-        self.datum = None
+        # datetime object from date  string in form of "%d.%m.%Y"
+        valuta = datetime.strptime(valuta, "%d.%m.%Y")
+        valuta = valuta.date()
 
-        if line is not None:
-            self.buchungsdatum, self.referenz, self.valuta, self.betrag, self.waehrung, self.datum = line.split(";")
-            self.datum = self.datum.strip()  # because last column has \n at the end
-            # datetime object from date  string in form of "%d.%m.%Y"
-            self.buchungsdatum = self.buchungsdatum.strip('\ufeff')
-            self.buchungsdatum = datetime.strptime(self.buchungsdatum, "%d.%m.%Y")
+        betrag = float(str(betrag).replace(",", "."))
 
-            # datetime object from date string in form of 15.03.2017 15:07:03:000
-            self.datum = datetime.strptime(self.datum, "%d.%m.%Y %H:%M:%S:%f")
+        # datetime object from date string in form of 15.03.2017 15:07:03:000
+        datum = datum.strip()  # because last column has \n at the end
+        datum = datetime.strptime(datum, "%d.%m.%Y %H:%M:%S:%f")
 
-    def __str__(self):
-        return f"{self.buchungsdatum} {str(self.betrag).rjust(9)} {self.waehrung}:  {self.referenz}"
+        return {"buchungsdatum": buchungsdatum,
+                "referenz": referenz,
+                "valuta": valuta,
+                "betrag": betrag,
+                "waehrung": waehrung,
+                "datum": datum}
 
-    def __eq__(self, other):
-        return self.buchungsdatum == other.buchungsdatum \
-               and self.referenz == other.referenz \
-               and self.valuta == other.valuta \
-               and self.betrag == other.betrag \
-               and self.waehrung == other.waehrung \
-               and self.datum == other.datum
-
-
-
-def read_files():
-    global accounts
+def read_all_files():
+    transactions = []
     logger.highlight("\nReading files...")
     directory_path = "files"  # Replace with the actual directory path
     if not (os.path.exists(directory_path) and os.path.isdir(directory_path)):
@@ -63,18 +54,16 @@ def read_files():
     for file_name in os.listdir(directory_path):
         if not os.path.isfile(os.path.join(directory_path, file_name)):
             logger.error(f"{file_name} is not a file.")
-            return
+            continue
         with open(os.path.join(directory_path, file_name), 'r') as file:
             logger.log("Opened file: " + file_name)
-            selected_account = None
-            for account in accounts:
-                if account.accountnumber in file_name:
-                    selected_account = account
-                    logger.log("Selected account: " + str(selected_account))
-            if selected_account is None:
-                logger.error(f"Could not find account for file {file_name}")
-                return
+            accountnumber = extract_accountnumber_from_filename(file_name)
+            if not accountnumber:
+                logger.error(f"Could not extract account number from file name: {file_name}")
+                continue
+            logger.log("Account number: " + accountnumber)
 
+            # LIST FIRST AND LAST LINE FOR CHECK
             first_line = file.readline()
             # logger.log(first_line.strip())
             first_line_date = first_line.split(';')[0]
@@ -82,36 +71,119 @@ def read_files():
             last_line_date = last_line.split(';')[0]
             # logger.log(last_line.strip())
             logger.log(f"From: {first_line_date} to {last_line_date}")
+
             file.seek(0)
             duplicates = 0
             added = 0
             for line in file:
-                transaction = Transaction(line)
-                if transaction in selected_account.transactions:
+                transaction = transaction_dict_from_line(line)
+                transaction["iban"] = accountnumber
+                #print(transaction)
+
+                if transaction in transactions:
                     duplicates += 1
-                    logger.debug(f"Duplicate found. Ignoring transaction: {transaction}")
+                    logger.log(f"Duplicate found. Ignoring transaction: {transaction}")
                     continue
+
+                transactions.append(transaction)
                 added += 1
-                selected_account.transactions.append(transaction)
 
             logger.log(f"Added {added} transactions. Found {duplicates} duplicates.")
+    logger.log(f"Done reading files. {len(transactions)} transactions registered.")
+    sorted_transactions = sorted(transactions, key=lambda x: x['buchungsdatum'])
 
-    logger.log("Done reading files.")
-    logger.log("Summary:")
-    for account in accounts:
-        logger.log(f"{account.accountnumber}: {len(account.transactions)} transactions from {account.transactions[0].buchungsdatum} to {account.transactions[-1].buchungsdatum}")
+    return sorted_transactions
 
-accounts = [Account(accountnumber="AT913301000004004636", name="Gehaltskonto", startingbalance=-706.88),
-            Account(accountnumber="AT383301077704004636", name="Sparkonto", startingbalance=10500)]
+def print_transaction_stats(transactions):
+    ibans = []
+    for item in transactions:
+        if item["iban"] not in ibans:
+            ibans.append(item["iban"])
+    logger.highlight("\nTransaction stats:")
+    logger.log(f"Found {len(ibans)} different IBANs.")
+    for iban in ibans:
+        subset_transactions = []
+        for item in transactions:
+            if item["iban"] == iban:
+                subset_transactions.append(item)
+        logger.green(f"IBAN: {iban}")
+        logger.log(f"{len(subset_transactions)} transactions")
+        subset_transactions.sort(key=lambda x: x['buchungsdatum'])
+        logger.log(f"First transaction: {subset_transactions[0]['buchungsdatum']}")
+        logger.log(f"Last transaction: {subset_transactions[-1]['buchungsdatum']}")
+
+def print_transactions(transactions):
+    logger.highlight("\nTransactions:")
+    if len(transactions) == 0:
+        logger.log("empty list.")
+    for transactions in transactions:
+        logger.log(transactions)
+
+def strip_up_to_max_date(transactions, max_date_transactions):
+    logger.highlight("\nStripping transactions, that only new ones are left")
+    # check for each iban
+    ibans = []
+    stripped_transactions = []
+    for item in transactions:
+        if item["iban"] not in ibans:
+            ibans.append(item["iban"])
+    logger.log(f"Found {len(ibans)} different IBANs.")
+
+    for iban in ibans:
+        logger.log(f"Checking iban {iban}")
+
+        # find max date for iban on server item
+        max_date = None
+        for max_date_transaction in max_date_transactions:
+            if max_date_transaction["iban"] == iban:
+                max_date = max_date_transaction["buchungsdatum"]
+        if max_date is None:
+            logger.error(f"Could not find max date for iban {iban}")
+            continue
+        logger.log(f"Max date for iban {iban} is {max_date}")
+
+        # compare max date with max date for iban on local item
+        for transaction in transactions:
+            if transaction["iban"] == iban:
+                if transaction["buchungsdatum"] < max_date:
+                    pass
+                    #logger.log(f"Transaction is older than {max_date}. Removing transaction: {transaction}")
+                    #transactions.remove(transaction)
+                elif transaction["buchungsdatum"] == max_date:
+                    logger.log(f"Transaction is same date as {max_date}. Comparing referenz.")
+                    same_name = False
+                    for max_date_transaction in max_date_transactions:
+                        if transaction["referenz"] == max_date_transaction["referenz"]:
+                            logger.log(f"Referenz is same. Removing transaction: {transaction}")
+                            same_name = True
+                    if not same_name:
+                        stripped_transactions.append(transaction)
+                elif transaction["buchungsdatum"] > max_date:
+                    logger.log(f"Transaction is newer than {max_date}. Keeping transaction: {transaction}")
+                    stripped_transactions.append(transaction)
+                else:
+                    logger.error(f"Something went wrong with transaction: {transaction}")
+        logger.log(f"Done with iban {iban}")
+
+        for max_date_transaction in max_date_transactions:
+            if max_date_transaction in stripped_transactions:
+                stripped_transactions.remove(max_date_transaction)
+    # if max date is same, compare referenz. if referenz is same, remove transaction
+    return stripped_transactions
+
+
 
 logger.greeting()
-read_files()
+transactions = read_all_files()
+print_transaction_stats(transactions)
+# upload_transactions(transactions)
+max_date = get_max_date()
+stripped = strip_up_to_max_date(transactions, max_date)
+print_transactions(stripped)
 
+# upload_transactions(accounts[0])
+# upload_transactions(accounts[1])
 
-for account in accounts:
-    # sum all transactions
-    balance = account.calc_balance()
-    logger.log(f"{account.accountnumber}: {balance} EUR")
 
 
 
