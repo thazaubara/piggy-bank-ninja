@@ -103,6 +103,7 @@ def get_categories(verbose=False):
         categories.append(row_dict)
         #logger.log(row_dict)
 
+    logger.log(f"Found {len(categories)} categories.")
     categories.sort(key=lambda x: x['id'])
 
     for category in categories:
@@ -116,7 +117,8 @@ def get_categories(verbose=False):
             indent = 4
         logger.log(f"{category['id']} {(' ' * indent + category['name']).ljust(24)} {category['beschreibung']}")
 
-    logger.log(f"\nFound {len(categories)} categories.")
+    logger.log("")
+
     return categories
 
 def print_transaction(transaction):
@@ -207,6 +209,10 @@ def apply_searchstrings(overwrite=False, force=False):
 def reset_categories():
     global connection
     logger.highlight("\nResetting categories")
+    user_input = input("Are you sure? Type 'yes' to confirm. \n> ")
+    if user_input != 'yes':
+        return
+
     cursor = connection.cursor()
     cursor.execute(f"UPDATE banking SET banking_category = 0")
 
@@ -215,17 +221,19 @@ def reset_categories():
     logger.log("Done resetting categories")
     return
 
-def get_all_without_category(filtertest=False):
+def exitget_all_without_category(loop=False, searchstring=""):
     results = send_query(f"SELECT * from banking WHERE banking_category = 0")
-    if not filtertest:
+    if not loop:
         for row in results:
             print_transaction(row)
 
-    if filtertest:
+    if loop:
         while True:
             for row in results:
                 print_transaction(row)
-            searchstring = input("Apply Filter for referenz! CTRL-C to exit! \n > ")
+            searchstring = input("Apply Filter for referenz! Type 'exit' to exit \nlwc > ")
+            if searchstring == 'exit':
+                break
             found_entries = 0
             for row in results:
                 if searchstring.lower() in row["referenz"].lower():
@@ -233,6 +241,19 @@ def get_all_without_category(filtertest=False):
                     logger.green(print_transaction(row))
             logger.log(f"Found {found_entries} entries for '{searchstring}'")
 
+def search_transactions(searchstring="", category=None):
+    base_sql = f"SELECT * from banking"
+    if searchstring != "":
+        base_sql += f" WHERE referenz LIKE '%{searchstring}%'"
+    if category is not None:
+        base_sql += f" AND banking_category = {category}"
+    else:
+        pass
+
+    logger.log(base_sql)
+    results = send_query(base_sql)
+    for row in results:
+        print_transaction(row)
 
 connect()
 

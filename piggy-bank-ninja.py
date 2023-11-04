@@ -215,11 +215,14 @@ def upload_new_transactions():
     else:
         logger.log("Aborted.")
 
+
+
+
 # SET UP DATABASE FROM CSV FILES
 #generate_sql_from_old_lut()
 # upload_new_transactions()
 
-logger.greeting()
+#
 
 # GET CATEGORIES AND DISPLAY FROM SERVER
 #reset_categories()
@@ -227,9 +230,36 @@ logger.greeting()
 # search_transactions("hofer dankt  ")
 
 #apply_searchstrings(overwrite=False, force=True)
-get_all_without_category(filtertest=True)
+# get_all_without_category(filtertest=True)
 
 
+
+if __name__ == "__main__":
+    logger.greeting()
+    while True:
+        user_inp = input("> ")
+        if user_inp == "exit":
+            logger.log("thx 4 using Piggy Bank Ninja!")
+            logger.log("cya next year ;)")
+            break
+        elif user_inp == "list-categories" or user_inp == "lc":
+            get_categories(verbose=True)
+        elif user_inp == "reset-categories" or user_inp == "rc":
+            reset_categories()
+        elif user_inp == "upload-csv" or user_inp == "ul":
+            upload_new_transactions()
+        elif user_inp.startswith("list-without-category") or user_inp.startswith("lw"):
+            search_transactions(searchstring=user_inp.split(" ")[1])
+        elif user_inp == "help" or user_inp == "h":
+            logger.log("exit: exit program")
+            logger.log("help [h]: show this help")
+            logger.log("list-categories [lc]: list all categories")
+            logger.log("upload-csv [ul]: upload new transactions from ./files")
+            logger.log("list-without-category [lwc]: list all transactions without category")
+            logger.log("reset-categories [rc]: reset all categories to default")
+            logger.log("")
+        else:
+            logger.log("Unknown command. Type 'help' for help.")
 
 
 
