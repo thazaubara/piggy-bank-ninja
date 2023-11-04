@@ -46,7 +46,7 @@ def upload_transactions(transactions):
                            f"VALUES ('{iban}', '{buchungsdatum}', '{referenz}', '{valuta}', {betrag}, '{waehrung}', '{datum}')"
             cursor.execute(insert_query)
         except mariadb.Error as error:
-            print(f"{error} {transaction}")
+            logger.error(f"{error} {transaction}")
         progress += 1
 
     connection.commit()
@@ -54,8 +54,9 @@ def upload_transactions(transactions):
 
 def get_max_date():
     global connection
+    logger.highlight("\nGetting MAX(buchungsdatum) transactions from server for each iban")
     cursor = connection.cursor()
-    cursor.execute(f"SELECT iban, buchungsdatum, referenz, valuta, betrag, waehrung, datum FROM banking WHERE (iban, datum) IN (SELECT iban, MAX(datum) FROM banking GROUP BY iban);")
+    cursor.execute(f"SELECT iban, buchungsdatum, referenz, valuta, betrag, waehrung, datum FROM banking WHERE (iban, buchungsdatum) IN (SELECT iban, MAX(buchungsdatum) FROM banking GROUP BY iban);")
     result = cursor.fetchall()
     columns = [i[0] for i in cursor.description]
     cursor.close()
@@ -66,6 +67,8 @@ def get_max_date():
         row_dict["betrag"] = float(row_dict["betrag"])
         transactions.append(row_dict)
         logger.log(row_dict)
+
+    logger.log(f"Found {len(transactions)} transactions.")
     return transactions
 
 connect()

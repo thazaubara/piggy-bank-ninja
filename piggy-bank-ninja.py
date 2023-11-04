@@ -24,8 +24,12 @@ def transaction_dict_from_line(csv_line):
 
         # referenz is already a string, kill quotes
         referenz = referenz.strip('"')
-        referenz = referenz.strip("'")
-        referenz = referenz.strip("'")
+        if "'" in referenz:
+            logger.warn(f"Found ' in referenz: {referenz}")
+            referenz = referenz.replace("'", "")
+        #referenz = referenz.strip("'")
+        #referenz = referenz.strip("'")
+
 
         # datetime object from date  string in form of "%d.%m.%Y"
         valuta = datetime.strptime(valuta, "%d.%m.%Y")
@@ -95,11 +99,13 @@ def read_all_files():
     return sorted_transactions
 
 def print_transaction_stats(transactions):
+    logger.highlight("\nTransaction stats:")
+    logger.log(f"Found {len(transactions)} transactions.")
     ibans = []
     for item in transactions:
         if item["iban"] not in ibans:
             ibans.append(item["iban"])
-    logger.highlight("\nTransaction stats:")
+
     logger.log(f"Found {len(ibans)} different IBANs.")
     for iban in ibans:
         subset_transactions = []
@@ -118,6 +124,12 @@ def print_transactions(transactions):
         logger.log("empty list.")
     for transactions in transactions:
         logger.log(transactions)
+
+def search_transactions(transactions, searchstring):
+    logger.highlight(f"\nSearching [{len(transactions)}] for {searchstring}")
+    for transaction in transactions:
+        if searchstring.lower() in transaction["referenz"].lower():
+            logger.log(f"[{transaction['buchungsdatum']}] {str(transaction['betrag']).rjust(10)}  {transaction['referenz']}")
 
 def strip_up_to_max_date(transactions, max_date_transactions):
     logger.highlight("\nStripping transactions, that only new ones are left")
@@ -138,7 +150,10 @@ def strip_up_to_max_date(transactions, max_date_transactions):
             if max_date_transaction["iban"] == iban:
                 max_date = max_date_transaction["buchungsdatum"]
         if max_date is None:
-            logger.error(f"Could not find max date for iban {iban}")
+            logger.error(f"Could not find max date for iban {iban}. Appending all.")
+            for transaction in transactions:
+                if transaction["iban"] == iban:
+                    stripped_transactions.append(transaction)
             continue
         logger.log(f"Max date for iban {iban} is {max_date}")
 
@@ -147,27 +162,21 @@ def strip_up_to_max_date(transactions, max_date_transactions):
             if transaction["iban"] == iban:
                 if transaction["buchungsdatum"] < max_date:
                     pass
-                    #logger.log(f"Transaction is older than {max_date}. Removing transaction: {transaction}")
-                    #transactions.remove(transaction)
-                elif transaction["buchungsdatum"] == max_date:
-                    logger.log(f"Transaction is same date as {max_date}. Comparing referenz.")
-                    same_name = False
-                    for max_date_transaction in max_date_transactions:
-                        if transaction["referenz"] == max_date_transaction["referenz"]:
-                            logger.log(f"Referenz is same. Removing transaction: {transaction}")
-                            same_name = True
-                    if not same_name:
-                        stripped_transactions.append(transaction)
-                elif transaction["buchungsdatum"] > max_date:
-                    logger.log(f"Transaction is newer than {max_date}. Keeping transaction: {transaction}")
-                    stripped_transactions.append(transaction)
+                    logger.debug(f"Transaction is older than {max_date}. Removing transaction: {transaction}")
+                    # transactions.remove(transaction)
                 else:
-                    logger.error(f"Something went wrong with transaction: {transaction}")
+                    logger.debug(f"Transaction is same or newer than {max_date}. Keeping transaction: {transaction}")
+                    found_same = False
+                    for max_date_transaction in max_date_transactions:
+                        if max_date_transaction["referenz"] == transaction["referenz"]:
+                            found_same = True
+                            logger.debug(f"   Found same transaction on server: {max_date_transaction}")
+                    if not found_same:
+                        logger.debug(f"   Did not find same transaction on server. Keeping transaction: {transaction}")
+                        stripped_transactions.append(transaction)
         logger.log(f"Done with iban {iban}")
+    logger.green(f"Done stripping transactions. {len(stripped_transactions)} transactions left.")
 
-        for max_date_transaction in max_date_transactions:
-            if max_date_transaction in stripped_transactions:
-                stripped_transactions.remove(max_date_transaction)
     # if max date is same, compare referenz. if referenz is same, remove transaction
     return stripped_transactions
 
@@ -176,10 +185,16 @@ def strip_up_to_max_date(transactions, max_date_transactions):
 logger.greeting()
 transactions = read_all_files()
 print_transaction_stats(transactions)
-# upload_transactions(transactions)
+
 max_date = get_max_date()
 stripped = strip_up_to_max_date(transactions, max_date)
+
 print_transactions(stripped)
+
+search_transactions(transactions, "visa")
+
+
+#upload_transactions(stripped)
 
 # upload_transactions(accounts[0])
 # upload_transactions(accounts[1])
