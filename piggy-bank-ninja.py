@@ -1,3 +1,4 @@
+import json
 
 import graph
 
@@ -86,7 +87,7 @@ def read_all_files():
 
                 if transaction in transactions:
                     duplicates += 1
-                    logger.log(f"Duplicate found. Ignoring transaction: {transaction}")
+                    logger.debug(f"Duplicate found. Ignoring transaction: {transaction}")
                     continue
 
                 transactions.append(transaction)
@@ -125,24 +126,18 @@ def print_transactions(transactions):
     for transactions in transactions:
         logger.log(transactions)
 
-def search_transactions(transactions, searchstring):
-    logger.highlight(f"\nSearching [{len(transactions)}] for {searchstring}")
-    for transaction in transactions:
-        if searchstring.lower() in transaction["referenz"].lower():
-            logger.log(f"[{transaction['buchungsdatum']}] {str(transaction['betrag']).rjust(10)}  {transaction['referenz']}")
-
 def strip_up_to_max_date(transactions, max_date_transactions):
-    logger.highlight("\nStripping transactions, that only new ones are left")
+    logger.log("Stripping transactions, that only new ones are left")
     # check for each iban
     ibans = []
     stripped_transactions = []
     for item in transactions:
         if item["iban"] not in ibans:
             ibans.append(item["iban"])
-    logger.log(f"Found {len(ibans)} different IBANs.")
+    logger.debug(f"Found {len(ibans)} different IBANs.")
 
     for iban in ibans:
-        logger.log(f"Checking iban {iban}")
+        logger.debug(f"Checking iban {iban}")
 
         # find max date for iban on server item
         max_date = None
@@ -155,7 +150,7 @@ def strip_up_to_max_date(transactions, max_date_transactions):
                 if transaction["iban"] == iban:
                     stripped_transactions.append(transaction)
             continue
-        logger.log(f"Max date for iban {iban} is {max_date}")
+        logger.debug(f"Max date for iban {iban} is {max_date}")
 
         # compare max date with max date for iban on local item
         for transaction in transactions:
@@ -180,25 +175,59 @@ def strip_up_to_max_date(transactions, max_date_transactions):
     # if max date is same, compare referenz. if referenz is same, remove transaction
     return stripped_transactions
 
+def generate_sql_from_old_lut():
+    logger.highlight("\nReading regex")
+    regex = []
+    with open("lut.json", 'r') as file:
+        for entry in json.load(file):
+            #logger.log(entry)
+            regex.append(entry)
 
+    logger.log(f"Found {len(regex)} entries in LUT")
+
+    regex.sort(key=lambda x: x['regex'])
+    regex_clean = []
+    for item in regex:
+        if item['regex'] != "":
+            regex_clean.append(item)
+            continue
+
+    logger.log(f"Cleaned down to {len(regex_clean)} entries.")
+    for item in regex_clean:
+
+        sqlstring = f"INSERT INTO `banking_matching` (`searchstring`, `name`, `info`) VALUES ('{item['regex'][2:-2]}', '{item['name']}', '{'alte kategorie: ' + item['kategorie']}');"
+        logger.log(sqlstring)
+    return regex
+
+def upload_new_transactions():
+    transactions = read_all_files()
+    print_transaction_stats(transactions)
+
+    max_date = get_max_date()
+    stripped = strip_up_to_max_date(transactions, max_date)
+
+    print_transactions(stripped)
+    print_transaction_stats(stripped)
+
+    user_input = input(f"Upload {len(stripped)} transactions? Type '{len(stripped)}' in console: ")
+    if user_input == len(stripped):
+        upload_transactions(stripped)
+    else:
+        logger.log("Aborted.")
+
+# SET UP DATABASE FROM CSV FILES
+#generate_sql_from_old_lut()
+# upload_new_transactions()
 
 logger.greeting()
-transactions = read_all_files()
-print_transaction_stats(transactions)
 
-max_date = get_max_date()
-stripped = strip_up_to_max_date(transactions, max_date)
+# GET CATEGORIES AND DISPLAY FROM SERVER
+#reset_categories()
+#get_categories(verbose=True)
+# search_transactions("hofer dankt  ")
 
-print_transactions(stripped)
-
-search_transactions(transactions, "visa")
-
-
-#upload_transactions(stripped)
-
-# upload_transactions(accounts[0])
-# upload_transactions(accounts[1])
-
+#apply_searchstrings(overwrite=False, force=True)
+get_all_without_category(filtertest=True)
 
 
 
