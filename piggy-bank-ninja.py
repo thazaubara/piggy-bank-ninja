@@ -26,7 +26,7 @@ def transaction_dict_from_line(csv_line):
         # referenz is already a string, kill quotes
         referenz = referenz.strip('"')
         if "'" in referenz:
-            logger.warn(f"Found ' in referenz: {referenz}")
+            logger.warn(f"Found ' in referenz: {referenz}. Deleting character.")
             referenz = referenz.replace("'", "")
         #referenz = referenz.strip("'")
         #referenz = referenz.strip("'")
@@ -51,17 +51,18 @@ def transaction_dict_from_line(csv_line):
 
 def read_all_files():
     transactions = []
-    logger.highlight("\nReading files...")
+    logger.highlight("\nReading files. Building offline cache.")
     directory_path = "files"  # Replace with the actual directory path
     if not (os.path.exists(directory_path) and os.path.isdir(directory_path)):
         logger.error(f"Directory {directory_path} does not exist.")
         return
-    for file_name in os.listdir(directory_path):
+
+    for file_name in sorted(os.listdir(directory_path)):
         if not os.path.isfile(os.path.join(directory_path, file_name)):
             logger.error(f"{file_name} is not a file.")
             continue
         with open(os.path.join(directory_path, file_name), 'r') as file:
-            logger.log("Opened file: " + file_name)
+            logger.log("-> Opened file: " + file_name)
             accountnumber = extract_accountnumber_from_filename(file_name)
             if not accountnumber:
                 logger.error(f"Could not extract account number from file name: {file_name}")
@@ -93,7 +94,7 @@ def read_all_files():
                 transactions.append(transaction)
                 added += 1
 
-            logger.log(f"Added {added} transactions. Found {duplicates} duplicates.")
+            logger.log(f"Added {added} transactions. Overlap of  {duplicates} transactions.")
     logger.log(f"Done reading files. {len(transactions)} transactions registered.")
     sorted_transactions = sorted(transactions, key=lambda x: x['buchungsdatum'])
 
@@ -123,8 +124,15 @@ def print_transactions(transactions):
     logger.highlight("\nTransactions:")
     if len(transactions) == 0:
         logger.log("empty list.")
-    for transactions in transactions:
-        logger.log(transactions)
+    for transaction in transactions:
+        # logger.log(transaction)
+        if transaction["betrag"] > 0:
+            betrag_string = "\033[32m" + "{: >8.2f}".format(transaction["betrag"]) + "\033[0m"
+        else:
+            betrag_string = "\033[31m" + "{: >8.2f}".format(transaction["betrag"]) + "\033[0m"
+        datum_srring = str(transaction["buchungsdatum"])
+        referenz_string = str(transaction["referenz"])
+        logger.log(f"{betrag_string}    {datum_srring}    {referenz_string}")
 
 def strip_up_to_max_date(transactions, max_date_transactions):
     logger.log("Stripping transactions, that only new ones are left")
@@ -210,29 +218,23 @@ def upload_new_transactions():
     print_transaction_stats(stripped)
 
     user_input = input(f"Upload {len(stripped)} transactions? Type '{len(stripped)}' in console: ")
-    if user_input == len(stripped):
+    if user_input == str(len(stripped)):
         upload_transactions(stripped)
     else:
         logger.log("Aborted.")
 
 
-
-
 # SET UP DATABASE FROM CSV FILES
-#generate_sql_from_old_lut()
+# generate_sql_from_old_lut()
 # upload_new_transactions()
 
-#
-
 # GET CATEGORIES AND DISPLAY FROM SERVER
-#reset_categories()
-#get_categories(verbose=True)
+# reset_categories()
+# get_categories(verbose=True)
 # search_transactions("hofer dankt  ")
 
-#apply_searchstrings(overwrite=False, force=True)
+# apply_searchstrings(overwrite=False, force=True)
 # get_all_without_category(filtertest=True)
-
-
 
 if __name__ == "__main__":
     logger.greeting()
@@ -249,7 +251,26 @@ if __name__ == "__main__":
         elif user_inp == "upload-csv" or user_inp == "ul":
             upload_new_transactions()
         elif user_inp.startswith("list-without-category") or user_inp.startswith("lw"):
-            search_transactions(searchstring=user_inp.split(" ")[1])
+            first_space_index = user_inp.find(" ")
+            if first_space_index != -1:
+                search = user_inp[first_space_index+1:]
+            else:
+                search = ""
+            search_transactions(searchstring=search)
+        elif user_inp.startswith("tag"):
+            string = user_inp[4:]
+            space_after_cat_index = string.find(" ")
+            if space_after_cat_index != -1:
+                tag_string = string[space_after_cat_index + 1:]
+                cat_string = string[:space_after_cat_index]
+                add_tag(category=cat_string, tag_string=tag_string)
+            else:
+                logger.log("usage: tag [cat.number] [searchstring]")
+
+
+        elif user_inp.startswith("list-tags") or user_inp.startswith("lt"):
+            get_categories_with_tags()
+
         elif user_inp == "help" or user_inp == "h":
             logger.log("exit: exit program")
             logger.log("help [h]: show this help")
@@ -257,6 +278,8 @@ if __name__ == "__main__":
             logger.log("upload-csv [ul]: upload new transactions from ./files")
             logger.log("list-without-category [lwc]: list all transactions without category")
             logger.log("reset-categories [rc]: reset all categories to default")
+            logger.log("tag [t]: tag transactions: tag [cat.number] [searchstring]")
+            logger.log("list-tags [lt]: list all tags")
             logger.log("")
         else:
             logger.log("Unknown command. Type 'help' for help.")
